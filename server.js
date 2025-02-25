@@ -42,9 +42,11 @@ const reasonOptions = [
 
 app.post("/slack/command", async (req, res) => {
   const { trigger_id, channel_id, command } = req.body;
+  console.log(`[COMMAND] Received slash command: ${command} from channel: ${channel_id}`);
 
-  // Ensure the command comes from the allowed channel if needed
+  // Ensure the command comes from the allowed channel
   if (channel_id !== ALLOWED_CHANNEL_ID) {
+    console.log(`[COMMAND] Command rejected. Received channel ${channel_id} is not allowed.`);
     return res.json({
       response_type: "ephemeral",
       text: "❌ This command is only allowed in the specified channel.",
@@ -130,6 +132,7 @@ app.post("/slack/command", async (req, res) => {
       },
     };
   } else {
+    console.log(`[COMMAND] Unknown command received: ${command}`);
     return res.status(400).json({
       response_type: "ephemeral",
       text: "Unknown command.",
@@ -137,27 +140,49 @@ app.post("/slack/command", async (req, res) => {
   }
 
   try {
+    console.log(`[COMMAND] Opening modal view for ${command}`);
     await axios.post("https://slack.com/api/views.open", modalView, {
       headers: { Authorization: `Bearer ${process.env.SLACK_BOT_TOKEN}` },
     });
+    console.log("[COMMAND] Modal opened successfully.");
     res.status(200).send();
   } catch (error) {
-    console.error("Error opening modal:", error.response ? error.response.data : error.message);
+    console.error("[COMMAND] Error opening modal:", error.response ? error.response.data : error.message);
     res.status(500).send("Error opening modal");
   }
 });
 
 app.post("/slack/interactions", async (req, res) => {
   const payload = JSON.parse(req.body.payload);
+  console.log(`[INTERACTIONS] Received modal submission with callback_id: ${payload.view.callback_id}`);
   let responseText = "";
-  // Use ALLOWED_CHANNEL_ID directly for posting the message
   const channel = ALLOWED_CHANNEL_ID;
   const todaysDate = new Date().toISOString().slice(0, 10);
+  const userId = payload.user.id;
+  let userEmail = "";
+
+  // Fetch the user's email using Slack's users.info API
+  try {
+    console.log(`[INTERACTIONS] Fetching user info for user: ${userId}`);
+    const userInfoResponse = await axios.get("https://slack.com/api/users.info", {
+      params: { user: userId },
+      headers: { Authorization: `Bearer ${process.env.SLACK_BOT_TOKEN}` },
+    });
+    if (userInfoResponse.data.ok) {
+      userEmail = userInfoResponse.data.user.profile.email;
+      console.log(`[INTERACTIONS] Retrieved email: ${userEmail}`);
+    } else {
+      console.error(`[INTERACTIONS] Failed to fetch user info: ${userInfoResponse.data.error}`);
+    }
+  } catch (error) {
+    console.error("[INTERACTIONS] Error fetching user info:", error.response ? error.response.data : error.message);
+  }
 
   if (payload.type === "view_submission") {
     if (payload.view.callback_id === "temp_closure") {
       const storeId = payload.view.state.values.store_id_input.store_id.value;
       if (!/^\d+$/.test(storeId)) {
+        console.log(`[INTERACTIONS] Store ID validation failed: ${storeId}`);
         return res.json({
           response_action: "errors",
           errors: {
@@ -167,10 +192,12 @@ app.post("/slack/interactions", async (req, res) => {
       }
       const closureReason = payload.view.state.values.reason_input.closure_reason.selected_option.value;
       const reopeningDate = payload.view.state.values.reopening_date_input.reopening_date.selected_date;
-      responseText = `*Temporary Closure Request*\n• Store ID: ${storeId}\n• Closure Reason: ${closureReason}\n• Store Reopening Date: ${reopeningDate}\n• Request Date: ${todaysDate}`;
+      responseText = `*Temporary Closure Request*\n• Store ID: ${storeId}\n• Closure Reason: ${closureReason}\n• Store Reopening Date: ${reopeningDate}\n• Request Date: ${todaysDate}\n• Requested By: ${userEmail}`;
+      console.log(`[INTERACTIONS] Composed temporary closure message: ${responseText}`);
     } else if (payload.view.callback_id === "perm_closure") {
       const storeId = payload.view.state.values.store_id_input.store_id.value;
       if (!/^\d+$/.test(storeId)) {
+        console.log(`[INTERACTIONS] Store ID validation failed: ${storeId}`);
         return res.json({
           response_action: "errors",
           errors: {
@@ -179,18 +206,21 @@ app.post("/slack/interactions", async (req, res) => {
         });
       }
       const closureReason = payload.view.state.values.reason_input.closure_reason.selected_option.value;
-      responseText = `*Permanent Closure Request*\n• Store ID: ${storeId}\n• Closure Reason: ${closureReason}\n• Request Date: ${todaysDate}`;
+      responseText = `*Permanent Closure Request*\n• Store ID: ${storeId}\n• Closure Reason: ${closureReason}\n• Request Date: ${todaysDate}\n• Requested By: ${userEmail}`;
+      console.log(`[INTERACTIONS] Composed permanent closure message: ${responseText}`);
     }
 
     try {
+      console.log(`[INTERACTIONS] Posting message to channel ${channel}`);
       await axios.post("https://slack.com/api/chat.postMessage", {
         channel: channel,
         text: responseText,
       }, {
         headers: { Authorization: `Bearer ${process.env.SLACK_BOT_TOKEN}` },
       });
+      console.log("[INTERACTIONS] Message posted successfully.");
     } catch (error) {
-      console.error("Error posting message:", error.response ? error.response.data : error.message);
+      console.error("[INTERACTIONS] Error posting message:", error.response ? error.response.data : error.message);
     }
 
     res.status(200).send();
