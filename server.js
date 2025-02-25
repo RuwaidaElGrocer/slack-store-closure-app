@@ -160,22 +160,29 @@ app.post("/slack/interactions", async (req, res) => {
   const todaysDate = new Date().toISOString().slice(0, 10);
   const userId = payload.user.id;
   let userEmail = "";
+  let fullUserInfo = "";
 
-  // Fetch the user's email using Slack's users.info API
+  // Fetch the user's info using Slack's users.info API
   try {
     console.log(`[INTERACTIONS] Fetching user info for user: ${userId}`);
     const userInfoResponse = await axios.get("https://slack.com/api/users.info", {
       params: { user: userId },
       headers: { Authorization: `Bearer ${process.env.SLACK_BOT_TOKEN}` },
     });
-    if (userInfoResponse.data.ok) {
-      userEmail = userInfoResponse.data.user.profile.email;
+    console.log("[INTERACTIONS] User info response:", userInfoResponse.data);
+    if (userInfoResponse.data.ok && userInfoResponse.data.user && userInfoResponse.data.user.profile) {
+      userEmail = userInfoResponse.data.user.profile.email || "Email not available";
+      fullUserInfo = JSON.stringify(userInfoResponse.data, null, 2);
       console.log(`[INTERACTIONS] Retrieved email: ${userEmail}`);
     } else {
       console.error(`[INTERACTIONS] Failed to fetch user info: ${userInfoResponse.data.error}`);
+      userEmail = "Email not available";
+      fullUserInfo = "User info not available";
     }
   } catch (error) {
     console.error("[INTERACTIONS] Error fetching user info:", error.response ? error.response.data : error.message);
+    userEmail = "Email not available";
+    fullUserInfo = "User info not available";
   }
 
   if (payload.type === "view_submission") {
@@ -192,7 +199,7 @@ app.post("/slack/interactions", async (req, res) => {
       }
       const closureReason = payload.view.state.values.reason_input.closure_reason.selected_option.value;
       const reopeningDate = payload.view.state.values.reopening_date_input.reopening_date.selected_date;
-      responseText = `*Temporary Closure Request*\n• Store ID: ${storeId}\n• Closure Reason: ${closureReason}\n• Store Reopening Date: ${reopeningDate}\n• Request Date: ${todaysDate}\n• Requested By: ${userEmail}`;
+      responseText = `*Temporary Closure Request*\n• Store ID: ${storeId}\n• Closure Reason: ${closureReason}\n• Store Reopening Date: ${reopeningDate}\n• Request Date: ${todaysDate}\n• Requested By: ${userEmail}\n• Full User Info:\n\`\`\`${fullUserInfo}\`\`\``;
       console.log(`[INTERACTIONS] Composed temporary closure message: ${responseText}`);
     } else if (payload.view.callback_id === "perm_closure") {
       const storeId = payload.view.state.values.store_id_input.store_id.value;
@@ -206,7 +213,7 @@ app.post("/slack/interactions", async (req, res) => {
         });
       }
       const closureReason = payload.view.state.values.reason_input.closure_reason.selected_option.value;
-      responseText = `*Permanent Closure Request*\n• Store ID: ${storeId}\n• Closure Reason: ${closureReason}\n• Request Date: ${todaysDate}\n• Requested By: ${userEmail}`;
+      responseText = `*Permanent Closure Request*\n• Store ID: ${storeId}\n• Closure Reason: ${closureReason}\n• Request Date: ${todaysDate}\n• Requested By: ${userEmail}\n• Full User Info:\n\`\`\`${fullUserInfo}\`\`\``;
       console.log(`[INTERACTIONS] Composed permanent closure message: ${responseText}`);
     }
 
