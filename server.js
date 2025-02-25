@@ -132,7 +132,7 @@ app.post("/slack/command", async (req, res) => {
   }
 });
 
-// Handle Modal Submission
+// Handle Modal Submission with numeric validation for Store ID
 app.post("/slack/interactions", async (req, res) => {
   const payload = JSON.parse(req.body.payload);
   let responseText = "";
@@ -140,11 +140,29 @@ app.post("/slack/interactions", async (req, res) => {
   if (payload.type === "view_submission") {
     if (payload.view.callback_id === "temp_closure") {
       const storeId = payload.view.state.values.store_id_input.store_id.value;
+      // Validate store ID is numeric
+      if (!/^\d+$/.test(storeId)) {
+        return res.json({
+          response_action: "errors",
+          errors: {
+            store_id_input: "Store ID must be a number.",
+          },
+        });
+      }
       const closureDate = payload.view.state.values.date_input.closure_date.value;
       const closureReason = payload.view.state.values.reason_input.closure_reason.value;
       responseText = `Temporary Closure for store ID ${storeId} on ${closureDate}\nReason: ${closureReason}`;
     } else if (payload.view.callback_id === "perm_closure") {
       const storeId = payload.view.state.values.store_id_input.store_id.value;
+      // Validate store ID is numeric
+      if (!/^\d+$/.test(storeId)) {
+        return res.json({
+          response_action: "errors",
+          errors: {
+            store_id_input: "Store ID must be a number.",
+          },
+        });
+      }
       const storeName = payload.view.state.values.store_name_input.store_name.value;
       const additionalInfo = payload.view.state.values.additional_info_input.additional_info.value;
       responseText = `Permanent Closure for store ID ${storeId} (${storeName})\nAdditional Info: ${additionalInfo}`;
