@@ -12,6 +12,34 @@ const ALLOWED_CHANNEL_ID = "C08DT4RE96K"; // Replace with your actual channel ID
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
 
+// Dropdown options for "Reason for Closure"
+const reasonOptions = [
+  {
+    text: { type: "plain_text", text: "Operational Issues" },
+    value: "operational_issues"
+  },
+  {
+    text: { type: "plain_text", text: "Contract Expired" },
+    value: "contract_expired"
+  },
+  {
+    text: { type: "plain_text", text: "Store Physically Closed" },
+    value: "store_physically_closed"
+  },
+  {
+    text: { type: "plain_text", text: "Logistical Decision" },
+    value: "logistical_decision"
+  },
+  {
+    text: { type: "plain_text", text: "Finance Concerns" },
+    value: "finance_concerns"
+  },
+  {
+    text: { type: "plain_text", text: "Public Holiday" },
+    value: "public_holiday"
+  },
+];
+
 // Handle Slash Command
 app.post("/slack/command", async (req, res) => {
   const { trigger_id, channel_id, command } = req.body;
@@ -49,9 +77,9 @@ app.post("/slack/command", async (req, res) => {
             type: "input",
             block_id: "date_input",
             element: {
-              type: "plain_text_input",
+              type: "datepicker",
               action_id: "closure_date",
-              placeholder: { type: "plain_text", text: "YYYY-MM-DD" },
+              placeholder: { type: "plain_text", text: "Select a date" },
             },
             label: { type: "plain_text", text: "Closure Date:" },
           },
@@ -59,9 +87,10 @@ app.post("/slack/command", async (req, res) => {
             type: "input",
             block_id: "reason_input",
             element: {
-              type: "plain_text_input",
+              type: "static_select",
               action_id: "closure_reason",
-              multiline: true,
+              placeholder: { type: "plain_text", text: "Select a reason" },
+              options: reasonOptions,
             },
             label: { type: "plain_text", text: "Reason for Closure:" },
           },
@@ -95,6 +124,17 @@ app.post("/slack/command", async (req, res) => {
               action_id: "store_name",
             },
             label: { type: "plain_text", text: "Store Name:" },
+          },
+          {
+            type: "input",
+            block_id: "reason_input",
+            element: {
+              type: "static_select",
+              action_id: "closure_reason",
+              placeholder: { type: "plain_text", text: "Select a reason" },
+              options: reasonOptions,
+            },
+            label: { type: "plain_text", text: "Reason for Closure:" },
           },
           {
             type: "input",
@@ -132,7 +172,7 @@ app.post("/slack/command", async (req, res) => {
   }
 });
 
-// Handle Modal Submission with numeric validation for Store ID
+// Handle Modal Submission with numeric validation for Store ID and extraction for dropdowns
 app.post("/slack/interactions", async (req, res) => {
   const payload = JSON.parse(req.body.payload);
   let responseText = "";
@@ -149,8 +189,10 @@ app.post("/slack/interactions", async (req, res) => {
           },
         });
       }
-      const closureDate = payload.view.state.values.date_input.closure_date.value;
-      const closureReason = payload.view.state.values.reason_input.closure_reason.value;
+      // Extract selected date from the datepicker
+      const closureDate = payload.view.state.values.date_input.closure_date.selected_date;
+      // Extract selected reason (dropdown) for closure
+      const closureReason = payload.view.state.values.reason_input.closure_reason.selected_option.value;
       responseText = `Temporary Closure for store ID ${storeId} on ${closureDate}\nReason: ${closureReason}`;
     } else if (payload.view.callback_id === "perm_closure") {
       const storeId = payload.view.state.values.store_id_input.store_id.value;
@@ -164,8 +206,10 @@ app.post("/slack/interactions", async (req, res) => {
         });
       }
       const storeName = payload.view.state.values.store_name_input.store_name.value;
+      // Extract selected reason (dropdown) for closure
+      const closureReason = payload.view.state.values.reason_input.closure_reason.selected_option.value;
       const additionalInfo = payload.view.state.values.additional_info_input.additional_info.value;
-      responseText = `Permanent Closure for store ID ${storeId} (${storeName})\nAdditional Info: ${additionalInfo}`;
+      responseText = `Permanent Closure for store ID ${storeId} (${storeName})\nReason: ${closureReason}\nAdditional Info: ${additionalInfo}`;
     }
 
     // Post the message back to the channel (using payload.user.id here; adjust if needed)
