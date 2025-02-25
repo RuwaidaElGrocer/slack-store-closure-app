@@ -1,0 +1,1 @@
+# slack-store-closure-app
