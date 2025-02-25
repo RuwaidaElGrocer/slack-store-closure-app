@@ -56,7 +56,7 @@ app.post("/slack/command", async (req, res) => {
   if (command === "/temporaryclosure") {
     modalView = {
       trigger_id,
-      private_metadata: channel_id, // Pass channel ID for later use in submission
+      private_metadata: channel_id, // Pass the channel ID for later use in submission
       view: {
         type: "modal",
         callback_id: "temp_closure",
@@ -160,22 +160,6 @@ app.post("/slack/interactions", async (req, res) => {
   const channel = payload.view.private_metadata;
   // Get today's date (YYYY-MM-DD)
   const todaysDate = new Date().toISOString().slice(0, 10);
-  // Get the user ID who submitted the modal
-  const userId = payload.user.id;
-  let userEmail = "";
-
-  // Fetch the user's email using Slack's users.info API
-  try {
-    const userInfoResponse = await axios.get("https://slack.com/api/users.info", {
-      params: { user: userId },
-      headers: { Authorization: `Bearer ${process.env.SLACK_BOT_TOKEN}` },
-    });
-    if (userInfoResponse.data.ok) {
-      userEmail = userInfoResponse.data.user.profile.email;
-    }
-  } catch (error) {
-    console.error("Error fetching user info:", error.response ? error.response.data : error.message);
-  }
 
   if (payload.type === "view_submission") {
     if (payload.view.callback_id === "temp_closure") {
@@ -189,11 +173,9 @@ app.post("/slack/interactions", async (req, res) => {
           },
         });
       }
-      // Extract selected closure reason from the dropdown
       const closureReason = payload.view.state.values.reason_input.closure_reason.selected_option.value;
-      // Extract the store reopening date from the datepicker
       const reopeningDate = payload.view.state.values.reopening_date_input.reopening_date.selected_date;
-      responseText = `*Temporary Closure Request*\n• Store ID: ${storeId}\n• Closure Reason: ${closureReason}\n• Store Reopening Date: ${reopeningDate}\n• Closure Requested On: ${todaysDate}\n• Requested By: ${userEmail}`;
+      responseText = `*Temporary Closure Request*\n• Store ID: ${storeId}\n• Closure Reason: ${closureReason}\n• Store Reopening Date: ${reopeningDate}\n• Request Date: ${todaysDate}`;
     } else if (payload.view.callback_id === "perm_closure") {
       const storeId = payload.view.state.values.store_id_input.store_id.value;
       if (!/^\d+$/.test(storeId)) {
@@ -205,10 +187,10 @@ app.post("/slack/interactions", async (req, res) => {
         });
       }
       const closureReason = payload.view.state.values.reason_input.closure_reason.selected_option.value;
-      responseText = `*Permanent Closure Request*\n• Store ID: ${storeId}\n• Closure Reason: ${closureReason}\n• Closure Requested On: ${todaysDate}\n• Requested By: ${userEmail}`;
+      responseText = `*Permanent Closure Request*\n• Store ID: ${storeId}\n• Closure Reason: ${closureReason}\n• Request Date: ${todaysDate}`;
     }
 
-    // Post the message back to the same channel the slash command was received
+    // Post the message back to the same channel from which the slash command was received
     try {
       await axios.post("https://slack.com/api/chat.postMessage", {
         channel: channel,
