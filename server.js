@@ -37,6 +37,16 @@ app.post("/slack/command", async (req, res) => {
         blocks: [
           {
             type: "input",
+            block_id: "store_id_input",
+            element: {
+              type: "plain_text_input",
+              action_id: "store_id",
+              placeholder: { type: "plain_text", text: "Enter store ID as a number" },
+            },
+            label: { type: "plain_text", text: "Store ID:" },
+          },
+          {
+            type: "input",
             block_id: "date_input",
             element: {
               type: "plain_text_input",
@@ -69,22 +79,22 @@ app.post("/slack/command", async (req, res) => {
         blocks: [
           {
             type: "input",
+            block_id: "store_id_input",
+            element: {
+              type: "plain_text_input",
+              action_id: "store_id",
+              placeholder: { type: "plain_text", text: "Enter store ID as a number" },
+            },
+            label: { type: "plain_text", text: "Store ID:" },
+          },
+          {
+            type: "input",
             block_id: "store_name_input",
             element: {
               type: "plain_text_input",
               action_id: "store_name",
             },
             label: { type: "plain_text", text: "Store Name:" },
-          },
-          {
-            type: "input",
-            block_id: "closure_date_input",
-            element: {
-              type: "plain_text_input",
-              action_id: "closure_date",
-              placeholder: { type: "plain_text", text: "YYYY-MM-DD" },
-            },
-            label: { type: "plain_text", text: "Closure Date:" },
           },
           {
             type: "input",
@@ -129,18 +139,15 @@ app.post("/slack/interactions", async (req, res) => {
 
   if (payload.type === "view_submission") {
     if (payload.view.callback_id === "temp_closure") {
+      const storeId = payload.view.state.values.store_id_input.store_id.value;
       const closureDate = payload.view.state.values.date_input.closure_date.value;
-      const closureReason =
-        payload.view.state.values.reason_input.closure_reason.value;
-      responseText = `Temporary Closure on ${closureDate}\nReason: ${closureReason}`;
+      const closureReason = payload.view.state.values.reason_input.closure_reason.value;
+      responseText = `Temporary Closure for store ID ${storeId} on ${closureDate}\nReason: ${closureReason}`;
     } else if (payload.view.callback_id === "perm_closure") {
-      const storeName =
-        payload.view.state.values.store_name_input.store_name.value;
-      const closureDate =
-        payload.view.state.values.closure_date_input.closure_date.value;
-      const additionalInfo =
-        payload.view.state.values.additional_info_input.additional_info.value;
-      responseText = `Permanent Closure of ${storeName} on ${closureDate}\nAdditional Info: ${additionalInfo}`;
+      const storeId = payload.view.state.values.store_id_input.store_id.value;
+      const storeName = payload.view.state.values.store_name_input.store_name.value;
+      const additionalInfo = payload.view.state.values.additional_info_input.additional_info.value;
+      responseText = `Permanent Closure for store ID ${storeId} (${storeName})\nAdditional Info: ${additionalInfo}`;
     }
 
     // Post the message back to the channel (using payload.user.id here; adjust if needed)
