@@ -6,7 +6,7 @@ const axios = require("axios");
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Hardcoded Allowed Channel ID – replace with your actual channel ID
+// Allowed Channel ID – replace with your actual channel ID
 const ALLOWED_CHANNEL_ID = "C08DT4RE96K";
 
 app.use(bodyParser.urlencoded({ extended: true }));
@@ -43,11 +43,11 @@ const reasonOptions = [
 app.post("/slack/command", async (req, res) => {
   const { trigger_id, channel_id, command } = req.body;
 
-  // Ensure the command comes from the allowed channel
+  // Ensure the command comes from the allowed channel if needed
   if (channel_id !== ALLOWED_CHANNEL_ID) {
     return res.json({
       response_type: "ephemeral",
-      text: "❌ This command is only allowed in a specific channel.",
+      text: "❌ This command is only allowed in the specified channel.",
     });
   }
 
@@ -56,7 +56,6 @@ app.post("/slack/command", async (req, res) => {
   if (command === "/temporaryclosure") {
     modalView = {
       trigger_id,
-      private_metadata: channel_id, // Pass the channel ID for later use in submission
       view: {
         type: "modal",
         callback_id: "temp_closure",
@@ -100,7 +99,6 @@ app.post("/slack/command", async (req, res) => {
   } else if (command === "/permanentclosure") {
     modalView = {
       trigger_id,
-      private_metadata: channel_id,
       view: {
         type: "modal",
         callback_id: "perm_closure",
@@ -144,10 +142,7 @@ app.post("/slack/command", async (req, res) => {
     });
     res.status(200).send();
   } catch (error) {
-    console.error(
-      "Error opening modal:",
-      error.response ? error.response.data : error.message
-    );
+    console.error("Error opening modal:", error.response ? error.response.data : error.message);
     res.status(500).send("Error opening modal");
   }
 });
@@ -155,16 +150,13 @@ app.post("/slack/command", async (req, res) => {
 app.post("/slack/interactions", async (req, res) => {
   const payload = JSON.parse(req.body.payload);
   let responseText = "";
-
-  // Retrieve the channel ID from private_metadata
-  const channel = payload.view.private_metadata;
-  // Get today's date (YYYY-MM-DD)
+  // Use ALLOWED_CHANNEL_ID directly for posting the message
+  const channel = ALLOWED_CHANNEL_ID;
   const todaysDate = new Date().toISOString().slice(0, 10);
 
   if (payload.type === "view_submission") {
     if (payload.view.callback_id === "temp_closure") {
       const storeId = payload.view.state.values.store_id_input.store_id.value;
-      // Validate that store ID is numeric
       if (!/^\d+$/.test(storeId)) {
         return res.json({
           response_action: "errors",
@@ -190,7 +182,6 @@ app.post("/slack/interactions", async (req, res) => {
       responseText = `*Permanent Closure Request*\n• Store ID: ${storeId}\n• Closure Reason: ${closureReason}\n• Request Date: ${todaysDate}`;
     }
 
-    // Post the message back to the same channel from which the slash command was received
     try {
       await axios.post("https://slack.com/api/chat.postMessage", {
         channel: channel,
