@@ -7,7 +7,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Hardcoded Allowed Channel ID
-const ALLOWED_CHANNEL_ID = "C08DT4RE96K"; // Replace with your actual channel ID
+const ALLOWED_CHANNEL_ID = "C12345678"; // Replace with your actual channel ID
 
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
@@ -26,14 +26,14 @@ app.post("/slack/command", async (req, res) => {
 
   let modalView;
 
-  // Check which command was invoked and set up the corresponding modal view
-  if (command === "/temporarystoreclosure") {
+  // Build modal view based on which slash command was invoked
+  if (command === "/temporaryclosure") {
     modalView = {
       trigger_id,
       view: {
         type: "modal",
-        callback_id: "temp_store_closure",
-        title: { type: "plain_text", text: "Temporary Store Closure" },
+        callback_id: "temp_closure",
+        title: { type: "plain_text", text: "Temporary Closure" },
         blocks: [
           {
             type: "input",
@@ -41,7 +41,7 @@ app.post("/slack/command", async (req, res) => {
             element: {
               type: "plain_text_input",
               action_id: "closure_date",
-              placeholder: { type: "plain_text", text: "YYYY-MM-DD" }
+              placeholder: { type: "plain_text", text: "YYYY-MM-DD" },
             },
             label: { type: "plain_text", text: "Closure Date:" },
           },
@@ -51,7 +51,7 @@ app.post("/slack/command", async (req, res) => {
             element: {
               type: "plain_text_input",
               action_id: "closure_reason",
-              multiline: true
+              multiline: true,
             },
             label: { type: "plain_text", text: "Reason for Closure:" },
           },
@@ -59,18 +59,21 @@ app.post("/slack/command", async (req, res) => {
         submit: { type: "plain_text", text: "Submit" },
       },
     };
-  } else if (command === "/permanentstoreclosure") {
+  } else if (command === "/permanentclosure") {
     modalView = {
       trigger_id,
       view: {
         type: "modal",
-        callback_id: "perm_store_closure",
-        title: { type: "plain_text", text: "Permanent Store Closure" },
+        callback_id: "perm_closure",
+        title: { type: "plain_text", text: "Permanent Closure" },
         blocks: [
           {
             type: "input",
             block_id: "store_name_input",
-            element: { type: "plain_text_input", action_id: "store_name" },
+            element: {
+              type: "plain_text_input",
+              action_id: "store_name",
+            },
             label: { type: "plain_text", text: "Store Name:" },
           },
           {
@@ -79,7 +82,7 @@ app.post("/slack/command", async (req, res) => {
             element: {
               type: "plain_text_input",
               action_id: "closure_date",
-              placeholder: { type: "plain_text", text: "YYYY-MM-DD" }
+              placeholder: { type: "plain_text", text: "YYYY-MM-DD" },
             },
             label: { type: "plain_text", text: "Closure Date:" },
           },
@@ -89,7 +92,7 @@ app.post("/slack/command", async (req, res) => {
             element: {
               type: "plain_text_input",
               action_id: "additional_info",
-              multiline: true
+              multiline: true,
             },
             label: { type: "plain_text", text: "Additional Info:" },
           },
@@ -98,6 +101,7 @@ app.post("/slack/command", async (req, res) => {
       },
     };
   } else {
+    // Unknown command case
     return res.status(400).json({
       response_type: "ephemeral",
       text: "Unknown command.",
@@ -110,7 +114,10 @@ app.post("/slack/command", async (req, res) => {
     });
     res.status(200).send();
   } catch (error) {
-    console.error("Error opening modal:", error);
+    console.error(
+      "Error opening modal:",
+      error.response ? error.response.data : error.message
+    );
     res.status(500).send("Error opening modal");
   }
 });
@@ -118,29 +125,35 @@ app.post("/slack/command", async (req, res) => {
 // Handle Modal Submission
 app.post("/slack/interactions", async (req, res) => {
   const payload = JSON.parse(req.body.payload);
+  let responseText = "";
 
   if (payload.type === "view_submission") {
-    let responseText = "";
-
-    // Process based on which modal was submitted
-    if (payload.view.callback_id === "temp_store_closure") {
+    if (payload.view.callback_id === "temp_closure") {
       const closureDate = payload.view.state.values.date_input.closure_date.value;
-      const closureReason = payload.view.state.values.reason_input.closure_reason.value;
+      const closureReason =
+        payload.view.state.values.reason_input.closure_reason.value;
       responseText = `Temporary Closure on ${closureDate}\nReason: ${closureReason}`;
-    } else if (payload.view.callback_id === "perm_store_closure") {
-      const storeName = payload.view.state.values.store_name_input.store_name.value;
-      const closureDate = payload.view.state.values.closure_date_input.closure_date.value;
-      const additionalInfo = payload.view.state.values.additional_info_input.additional_info.value;
+    } else if (payload.view.callback_id === "perm_closure") {
+      const storeName =
+        payload.view.state.values.store_name_input.store_name.value;
+      const closureDate =
+        payload.view.state.values.closure_date_input.closure_date.value;
+      const additionalInfo =
+        payload.view.state.values.additional_info_input.additional_info.value;
       responseText = `Permanent Closure of ${storeName} on ${closureDate}\nAdditional Info: ${additionalInfo}`;
     }
 
-    // Post the message back to the channel (for demo, using payload.user.id; update channel if needed)
-    await axios.post("https://slack.com/api/chat.postMessage", {
-      channel: payload.user.id,
-      text: responseText,
-    }, {
-      headers: { Authorization: `Bearer ${process.env.SLACK_BOT_TOKEN}` },
-    });
+    // Post the message back to the channel (using payload.user.id here; adjust if needed)
+    await axios.post(
+      "https://slack.com/api/chat.postMessage",
+      {
+        channel: payload.user.id,
+        text: responseText,
+      },
+      {
+        headers: { Authorization: `Bearer ${process.env.SLACK_BOT_TOKEN}` },
+      }
+    );
 
     res.status(200).send();
   }
