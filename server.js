@@ -100,7 +100,7 @@ app.post("/slack/interactions", async (req, res) => {
   const userId = payload.user.id;
   const todaysDate = new Date().toISOString().slice(0, 10);
 
-  // ✅ Handle Submit Button (Block Actions)
+  // ✅ Handle Submit Button (Block Actions Only)
   if (payload.type === "block_actions") {
     const action = payload.actions[0];
 
@@ -109,7 +109,7 @@ app.post("/slack/interactions", async (req, res) => {
       const originalTs = payload.message.ts;
       const taskRef = action.value || "store_1234";
 
-      // Update blocks: disable and rename the Submit button
+      // Update button text and disable it
       const updatedBlocks = payload.message.blocks.map(block => {
         if (block.type === "actions") {
           return {
@@ -119,23 +119,25 @@ app.post("/slack/interactions", async (req, res) => {
                 return {
                   ...el,
                   text: { type: "plain_text", text: "Submitted" },
+                  style: "primary",
                   disabled: true,
-                  style: "primary"
                 };
               }
               return el;
-            })
+            }),
           };
         }
         return block;
       });
+
+      const updatedText = `✅ Store task ${taskRef} has been submitted`;
 
       try {
         await axios.post("https://slack.com/api/chat.update", {
           channel: originalChannel,
           ts: originalTs,
           blocks: updatedBlocks,
-          text: "✅ Task submitted",
+          text: updatedText, // Force Slack to re-render UI
         }, {
           headers: { Authorization: `Bearer ${process.env.SLACK_BOT_TOKEN}` },
         });
@@ -149,7 +151,7 @@ app.post("/slack/interactions", async (req, res) => {
     }
   }
 
-  // ✅ Handle Modal Submissions
+  // ✅ Handle Modal Submission
   if (payload.type === "view_submission") {
     const state = payload.view.state.values;
     const callbackId = payload.view.callback_id;
