@@ -6,10 +6,16 @@ const axios = require("axios");
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-const ALLOWED_CHANNEL_ID = "C08DT4RE96K"; // Your Slack channel ID
+const ALLOWED_CHANNEL_ID = "C08DT4RE96K"; // Your allowed channel
 
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
+
+// ✅ Fix for "missing_charset" warning
+app.use((req, res, next) => {
+  res.setHeader("Content-Type", "application/json; charset=utf-8");
+  next();
+});
 
 const reasonOptions = [
   { text: { type: "plain_text", text: "Operational Issues" }, value: "operational_issues" },
@@ -95,17 +101,25 @@ app.post("/slack/command", async (req, res) => {
   }
 });
 
-// Interactions (Modal + Button)
+// Interactions: Modal Submit + Button Click
 app.post("/slack/interactions", async (req, res) => {
   const payload = JSON.parse(req.body.payload);
   const userId = payload.user.id;
   const todaysDate = new Date().toISOString().slice(0, 10);
 
-  // Handle Submit button click
+  // ✅ Handle button clicks
   if (payload.type === "block_actions") {
     const action = payload.actions[0];
 
     if (action.action_id === "submit_task") {
+      const buttonText = action.text?.text?.toLowerCase().trim();
+
+      // ❌ Ignore repeat clicks
+      if (buttonText === "submitted") {
+        console.log("⚠️ Button already submitted. Ignoring further clicks.");
+        return res.status(200).send();
+      }
+
       const originalChannel = payload.channel.id;
       const originalTs = payload.message.ts;
       const taskRef = action.value || "store_1234";
@@ -122,8 +136,8 @@ app.post("/slack/interactions", async (req, res) => {
         console.error("Error fetching user info:", err.response?.data || err.message);
       }
 
-      // Post summary message
       const summaryText = `:white_check_mark: *Task Completed*\n• Task Ref: ${taskRef}\n• Submitted by: <@${userId}> (${userEmail})\n• Date: ${todaysDate}`;
+
       try {
         await axios.post("https://slack.com/api/chat.postMessage", {
           channel: ALLOWED_CHANNEL_ID,
@@ -135,7 +149,7 @@ app.post("/slack/interactions", async (req, res) => {
         console.error("Error posting summary message:", err.response?.data || err.message);
       }
 
-      // Update original message with new button label
+      // Update the original button to "Submitted"
       const updatedBlocks = payload.message.blocks.map(block => {
         if (block.type === "actions") {
           return {
@@ -145,7 +159,7 @@ app.post("/slack/interactions", async (req, res) => {
                 return {
                   ...el,
                   text: { type: "plain_text", text: "Submitted" },
-                  style: "primary"
+                  style: "primary",
                 };
               }
               return el;
@@ -173,7 +187,7 @@ app.post("/slack/interactions", async (req, res) => {
     }
   }
 
-  // Handle Modal Submission
+  // ✅ Handle Modal Submission
   if (payload.type === "view_submission") {
     const state = payload.view.state.values;
     const callbackId = payload.view.callback_id;
@@ -189,10 +203,9 @@ app.post("/slack/interactions", async (req, res) => {
     }
 
     const closureReason = state.reason_input.closure_reason.selected_option.value;
-    const reopeningDate =
-      callbackId === "temp_closure"
-        ? state.reopening_date_input.reopening_date.selected_date
-        : null;
+    const reopeningDate = callbackId === "temp_closure"
+      ? state.reopening_date_input.reopening_date.selected_date
+      : null;
 
     let userEmail = "Unavailable";
     try {
