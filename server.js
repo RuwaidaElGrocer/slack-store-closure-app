@@ -5,7 +5,7 @@ const axios = require("axios");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const ALLOWED_CHANNEL_ID = "C08DT4RE96K"; // Replace with your real Slack channel ID
+const ALLOWED_CHANNEL_ID = "C08DT4RE96K"; // Replace with your actual channel ID
 
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
@@ -19,7 +19,7 @@ const reasonOptions = [
   { text: { type: "plain_text", text: "Public Holiday" }, value: "public_holiday" },
 ];
 
-// Slash command to open modal
+// Slash Command to open modal
 app.post("/slack/command", async (req, res) => {
   const { trigger_id, command, channel_id } = req.body;
 
@@ -94,118 +94,62 @@ app.post("/slack/command", async (req, res) => {
   }
 });
 
-// Interaction handler
+// Handle interactions
 app.post("/slack/interactions", async (req, res) => {
   const payload = JSON.parse(req.body.payload);
   const userId = payload.user.id;
   const todaysDate = new Date().toISOString().slice(0, 10);
 
-  // Handle button clicks
+  // ✅ Handle Submit Button (Block Actions)
   if (payload.type === "block_actions") {
     const action = payload.actions[0];
-    const taskRef = action.value || "store_1234";
-    const originalChannel = payload.channel.id;
-    const originalTs = payload.message.ts;
 
-    // ✅ If it's the submit_task button, disable it and rename to Submitted
     if (action.action_id === "submit_task") {
-      const updatedBlocks = [
-        {
-          type: "actions",
-          elements: [
-            {
-              type: "button",
-              text: { type: "plain_text", text: "Submitted" },
-              style: "primary",
-              action_id: action.action_id,
-              value: taskRef,
-              disabled: true,
-            },
-          ],
-        },
-      ];
+      const originalChannel = payload.channel.id;
+      const originalTs = payload.message.ts;
+      const taskRef = action.value || "store_1234";
+
+      // Update blocks: disable and rename the Submit button
+      const updatedBlocks = payload.message.blocks.map(block => {
+        if (block.type === "actions") {
+          return {
+            ...block,
+            elements: block.elements.map(el => {
+              if (el.type === "button" && el.action_id === "submit_task") {
+                return {
+                  ...el,
+                  text: { type: "plain_text", text: "Submitted" },
+                  disabled: true,
+                  style: "primary"
+                };
+              }
+              return el;
+            })
+          };
+        }
+        return block;
+      });
 
       try {
         await axios.post("https://slack.com/api/chat.update", {
           channel: originalChannel,
           ts: originalTs,
           blocks: updatedBlocks,
-          text: "✅ Submitted",
+          text: "✅ Task submitted",
         }, {
           headers: { Authorization: `Bearer ${process.env.SLACK_BOT_TOKEN}` },
         });
-        console.log("✅ 'Submit' button disabled");
+
+        console.log("✅ Submit button updated to 'Submitted'");
       } catch (err) {
-        console.error("❌ Error disabling submit button:", err.response?.data || err.message);
+        console.error("❌ Error updating submit button:", err.response?.data || err.message);
       }
 
       return res.status(200).send();
     }
-
-    // Handle other buttons (e.g., "Mark Completed") with summary message
-    let userEmail = "Unavailable";
-    let userName = `<@${userId}>`;
-
-    try {
-      const userInfo = await axios.get("https://slack.com/api/users.info", {
-        headers: { Authorization: `Bearer ${process.env.SLACK_BOT_TOKEN}` },
-        params: { user: userId },
-      });
-
-      const profile = userInfo.data?.user?.profile;
-      userEmail = profile?.email || "Unavailable";
-      userName = `<@${userId}> (${userEmail})`;
-    } catch (err) {
-      console.error("Error fetching user info:", err.response?.data || err.message);
-    }
-
-    const summaryText = `:white_check_mark: *Task Completed*\n• Task Ref: ${taskRef}\n• Submitted by: ${userName}\n• Date: ${todaysDate}`;
-
-    try {
-      await axios.post("https://slack.com/api/chat.postMessage", {
-        channel: ALLOWED_CHANNEL_ID,
-        text: summaryText,
-      }, {
-        headers: { Authorization: `Bearer ${process.env.SLACK_BOT_TOKEN}` },
-      });
-    } catch (err) {
-      console.error("Error posting summary message:", err.response?.data || err.message);
-    }
-
-    // Update original message
-    const updatedBlocks = [
-      {
-        type: "actions",
-        elements: [
-          {
-            type: "button",
-            text: { type: "plain_text", text: "Submitted" },
-            style: "primary",
-            action_id: action.action_id,
-            value: taskRef,
-            disabled: true,
-          },
-        ],
-      },
-    ];
-
-    try {
-      await axios.post("https://slack.com/api/chat.update", {
-        channel: originalChannel,
-        ts: originalTs,
-        blocks: updatedBlocks,
-        text: "✅ Task submitted",
-      }, {
-        headers: { Authorization: `Bearer ${process.env.SLACK_BOT_TOKEN}` },
-      });
-    } catch (err) {
-      console.error("Error updating original message:", err.response?.data || err.message);
-    }
-
-    return res.status(200).send();
   }
 
-  // Handle modal submissions
+  // ✅ Handle Modal Submissions
   if (payload.type === "view_submission") {
     const state = payload.view.state.values;
     const callbackId = payload.view.callback_id;
@@ -252,7 +196,7 @@ app.post("/slack/interactions", async (req, res) => {
         headers: { Authorization: `Bearer ${process.env.SLACK_BOT_TOKEN}` },
       });
     } catch (err) {
-      console.error("Error posting modal result:", err.response?.data || err.message);
+      console.error("Error posting modal message:", err.response?.data || err.message);
     }
 
     res.status(200).send();
