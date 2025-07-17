@@ -94,13 +94,13 @@ app.post("/slack/command", async (req, res) => {
   }
 });
 
-// Handle interactions
+// Interactions
 app.post("/slack/interactions", async (req, res) => {
   const payload = JSON.parse(req.body.payload);
   const userId = payload.user.id;
   const todaysDate = new Date().toISOString().slice(0, 10);
 
-  // ✅ Handle Submit Button (Block Actions Only)
+  // ✅ Handle Submit button click
   if (payload.type === "block_actions") {
     const action = payload.actions[0];
 
@@ -109,7 +109,7 @@ app.post("/slack/interactions", async (req, res) => {
       const originalTs = payload.message.ts;
       const taskRef = action.value || "store_1234";
 
-      // Update button text and disable it
+      // Update only the matching button
       const updatedBlocks = payload.message.blocks.map(block => {
         if (block.type === "actions") {
           return {
@@ -130,28 +130,26 @@ app.post("/slack/interactions", async (req, res) => {
         return block;
       });
 
-      const updatedText = `✅ Store task ${taskRef} has been submitted`;
-
       try {
-        await axios.post("https://slack.com/api/chat.update", {
+        const updateResponse = await axios.post("https://slack.com/api/chat.update", {
           channel: originalChannel,
           ts: originalTs,
           blocks: updatedBlocks,
-          text: updatedText, // Force Slack to re-render UI
+          text: `✅ Store task ${taskRef} has been submitted`, // Make text different to force update
         }, {
           headers: { Authorization: `Bearer ${process.env.SLACK_BOT_TOKEN}` },
         });
 
-        console.log("✅ Submit button updated to 'Submitted'");
+        console.log("chat.update response:", updateResponse.data);
       } catch (err) {
-        console.error("❌ Error updating submit button:", err.response?.data || err.message);
+        console.error("Error updating message:", err.response?.data || err.message);
       }
 
       return res.status(200).send();
     }
   }
 
-  // ✅ Handle Modal Submission
+  // ✅ Handle modal submission
   if (payload.type === "view_submission") {
     const state = payload.view.state.values;
     const callbackId = payload.view.callback_id;
