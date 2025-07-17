@@ -6,7 +6,7 @@ const axios = require("axios");
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-const ALLOWED_CHANNEL_ID = "C08DT4RE96K"; // Replace with your channel ID
+const ALLOWED_CHANNEL_ID = "C08DT4RE96K"; // Replace with your actual channel ID
 
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
@@ -20,7 +20,7 @@ const reasonOptions = [
   { text: { type: "plain_text", text: "Public Holiday" }, value: "public_holiday" },
 ];
 
-// Slash command handler
+// Slash Command to open modal
 app.post("/slack/command", async (req, res) => {
   const { trigger_id, command, channel_id } = req.body;
 
@@ -98,13 +98,50 @@ app.post("/slack/interactions", async (req, res) => {
   const userId = payload.user.id;
   const todaysDate = new Date().toISOString().slice(0, 10);
 
-  // Button Click
+  // Handle button clicks
   if (payload.type === "block_actions") {
     const action = payload.actions[0];
+    const buttonText = action.text.text.trim().toLowerCase();
     const taskRef = action.value || "store_1234";
     const originalChannel = payload.channel.id;
     const originalTs = payload.message.ts;
 
+    // Disable "Submit" button only
+    if (buttonText === "submit") {
+      const updatedBlocks = [
+        {
+          type: "actions",
+          elements: [
+            {
+              type: "button",
+              text: { type: "plain_text", text: "Submitted" },
+              style: "primary",
+              action_id: action.action_id,
+              value: taskRef,
+              disabled: true,
+            },
+          ],
+        },
+      ];
+
+      try {
+        await axios.post("https://slack.com/api/chat.update", {
+          channel: originalChannel,
+          ts: originalTs,
+          blocks: updatedBlocks,
+          text: "✅ Submitted",
+        }, {
+          headers: { Authorization: `Bearer ${process.env.SLACK_BOT_TOKEN}` },
+        });
+        console.log("✅ 'Submit' button disabled");
+      } catch (err) {
+        console.error("Error disabling submit button:", err.response?.data || err.message);
+      }
+
+      return res.status(200).send();
+    }
+
+    // For other buttons like "Mark Completed"
     let userEmail = "Unavailable";
     let userName = `<@${userId}>`;
 
@@ -113,6 +150,7 @@ app.post("/slack/interactions", async (req, res) => {
         headers: { Authorization: `Bearer ${process.env.SLACK_BOT_TOKEN}` },
         params: { user: userId },
       });
+
       const profile = userInfo.data?.user?.profile;
       userEmail = profile?.email || "Unavailable";
       userName = `<@${userId}> (${userEmail})`;
@@ -133,6 +171,7 @@ app.post("/slack/interactions", async (req, res) => {
       console.error("Error posting summary message:", err.response?.data || err.message);
     }
 
+    // Update original message to show "Submitted"
     const updatedBlocks = [
       {
         type: "actions",
@@ -141,7 +180,7 @@ app.post("/slack/interactions", async (req, res) => {
             type: "button",
             text: { type: "plain_text", text: "Submitted" },
             style: "primary",
-            action_id: "complete_button",
+            action_id: action.action_id,
             value: taskRef,
             disabled: true,
           },
@@ -159,13 +198,13 @@ app.post("/slack/interactions", async (req, res) => {
         headers: { Authorization: `Bearer ${process.env.SLACK_BOT_TOKEN}` },
       });
     } catch (err) {
-      console.error("Error updating original message:", err.response?.data || err.message);
+      console.error("Error updating button message:", err.response?.data || err.message);
     }
 
     return res.status(200).send();
   }
 
-  // Modal Submit
+  // Handle modal submissions
   if (payload.type === "view_submission") {
     const state = payload.view.state.values;
     const callbackId = payload.view.callback_id;
@@ -211,7 +250,7 @@ app.post("/slack/interactions", async (req, res) => {
         headers: { Authorization: `Bearer ${process.env.SLACK_BOT_TOKEN}` },
       });
     } catch (err) {
-      console.error("Error posting modal submission:", err.response?.data || err.message);
+      console.error("Error posting modal message:", err.response?.data || err.message);
     }
 
     res.status(200).send();
