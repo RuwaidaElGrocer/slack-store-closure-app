@@ -6,7 +6,7 @@ const axios = require("axios");
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-const ALLOWED_CHANNEL_ID = "C12345678"; // Replace with your actual channel ID
+const ALLOWED_CHANNEL_ID = "C08DT4RE96K"; // Replace with your actual channel ID
 
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
