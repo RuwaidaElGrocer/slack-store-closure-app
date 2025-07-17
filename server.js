@@ -5,8 +5,7 @@ const axios = require("axios");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-
-const ALLOWED_CHANNEL_ID = "C08DT4RE96K"; // Replace with your actual channel ID
+const ALLOWED_CHANNEL_ID = "C08DT4RE96K"; // Replace with your real Slack channel ID
 
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
@@ -20,7 +19,7 @@ const reasonOptions = [
   { text: { type: "plain_text", text: "Public Holiday" }, value: "public_holiday" },
 ];
 
-// Slash Command to open modal
+// Slash command to open modal
 app.post("/slack/command", async (req, res) => {
   const { trigger_id, command, channel_id } = req.body;
 
@@ -75,7 +74,10 @@ app.post("/slack/command", async (req, res) => {
     view: {
       type: "modal",
       callback_id: callbackId,
-      title: { type: "plain_text", text: callbackId === "temp_closure" ? "Temporary Closure" : "Permanent Closure" },
+      title: {
+        type: "plain_text",
+        text: callbackId === "temp_closure" ? "Temporary Closure" : "Permanent Closure",
+      },
       blocks,
       submit: { type: "plain_text", text: "Submit" },
     },
@@ -101,13 +103,12 @@ app.post("/slack/interactions", async (req, res) => {
   // Handle button clicks
   if (payload.type === "block_actions") {
     const action = payload.actions[0];
-    const buttonText = action.text.text.trim().toLowerCase();
     const taskRef = action.value || "store_1234";
     const originalChannel = payload.channel.id;
     const originalTs = payload.message.ts;
 
-    // Disable "Submit" button only
-    if (buttonText === "submit") {
+    // ✅ If it's the submit_task button, disable it and rename to Submitted
+    if (action.action_id === "submit_task") {
       const updatedBlocks = [
         {
           type: "actions",
@@ -135,13 +136,13 @@ app.post("/slack/interactions", async (req, res) => {
         });
         console.log("✅ 'Submit' button disabled");
       } catch (err) {
-        console.error("Error disabling submit button:", err.response?.data || err.message);
+        console.error("❌ Error disabling submit button:", err.response?.data || err.message);
       }
 
       return res.status(200).send();
     }
 
-    // For other buttons like "Mark Completed"
+    // Handle other buttons (e.g., "Mark Completed") with summary message
     let userEmail = "Unavailable";
     let userName = `<@${userId}>`;
 
@@ -171,7 +172,7 @@ app.post("/slack/interactions", async (req, res) => {
       console.error("Error posting summary message:", err.response?.data || err.message);
     }
 
-    // Update original message to show "Submitted"
+    // Update original message
     const updatedBlocks = [
       {
         type: "actions",
@@ -198,7 +199,7 @@ app.post("/slack/interactions", async (req, res) => {
         headers: { Authorization: `Bearer ${process.env.SLACK_BOT_TOKEN}` },
       });
     } catch (err) {
-      console.error("Error updating button message:", err.response?.data || err.message);
+      console.error("Error updating original message:", err.response?.data || err.message);
     }
 
     return res.status(200).send();
@@ -220,9 +221,10 @@ app.post("/slack/interactions", async (req, res) => {
     }
 
     const closureReason = state.reason_input.closure_reason.selected_option.value;
-    const reopeningDate = callbackId === "temp_closure"
-      ? state.reopening_date_input.reopening_date.selected_date
-      : null;
+    const reopeningDate =
+      callbackId === "temp_closure"
+        ? state.reopening_date_input.reopening_date.selected_date
+        : null;
 
     let userEmail = "Unavailable";
     try {
@@ -232,7 +234,7 @@ app.post("/slack/interactions", async (req, res) => {
       });
       userEmail = userInfo.data?.user?.profile?.email || "Unavailable";
     } catch (err) {
-      console.error("Error fetching email:", err.response?.data || err.message);
+      console.error("Error fetching user info:", err.response?.data || err.message);
     }
 
     let text = `*${callbackId === "temp_closure" ? "Temporary" : "Permanent"} Closure Request*`;
@@ -250,11 +252,13 @@ app.post("/slack/interactions", async (req, res) => {
         headers: { Authorization: `Bearer ${process.env.SLACK_BOT_TOKEN}` },
       });
     } catch (err) {
-      console.error("Error posting modal message:", err.response?.data || err.message);
+      console.error("Error posting modal result:", err.response?.data || err.message);
     }
 
     res.status(200).send();
   }
 });
 
-app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
+app.listen(PORT, () => {
+  console.log(`✅ Server running on port ${PORT}`);
+});
