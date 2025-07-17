@@ -20,7 +20,7 @@ const reasonOptions = [
   { text: { type: "plain_text", text: "Public Holiday" }, value: "public_holiday" },
 ];
 
-// Slash command to open modal
+// Slash command handler
 app.post("/slack/command", async (req, res) => {
   const { trigger_id, command, channel_id } = req.body;
 
@@ -76,7 +76,7 @@ app.post("/slack/command", async (req, res) => {
       type: "modal",
       callback_id: callbackId,
       title: { type: "plain_text", text: callbackId === "temp_closure" ? "Temporary Closure" : "Permanent Closure" },
-      blocks: blocks,
+      blocks,
       submit: { type: "plain_text", text: "Submit" },
     },
   };
@@ -92,13 +92,13 @@ app.post("/slack/command", async (req, res) => {
   }
 });
 
-// Handle modal submissions and button clicks
+// Interaction handler
 app.post("/slack/interactions", async (req, res) => {
   const payload = JSON.parse(req.body.payload);
   const userId = payload.user.id;
   const todaysDate = new Date().toISOString().slice(0, 10);
 
-  // ===== BUTTON CLICK =====
+  // Button Click
   if (payload.type === "block_actions") {
     const action = payload.actions[0];
     const taskRef = action.value || "store_1234";
@@ -130,7 +130,7 @@ app.post("/slack/interactions", async (req, res) => {
         headers: { Authorization: `Bearer ${process.env.SLACK_BOT_TOKEN}` },
       });
     } catch (err) {
-      console.error("Error posting task completed message:", err.response?.data || err.message);
+      console.error("Error posting summary message:", err.response?.data || err.message);
     }
 
     const updatedBlocks = [
@@ -159,18 +159,18 @@ app.post("/slack/interactions", async (req, res) => {
         headers: { Authorization: `Bearer ${process.env.SLACK_BOT_TOKEN}` },
       });
     } catch (err) {
-      console.error("Error updating button message:", err.response?.data || err.message);
+      console.error("Error updating original message:", err.response?.data || err.message);
     }
 
     return res.status(200).send();
   }
 
-  // ===== MODAL SUBMIT =====
+  // Modal Submit
   if (payload.type === "view_submission") {
     const state = payload.view.state.values;
     const callbackId = payload.view.callback_id;
-
     const storeId = state.store_id_input.store_id.value;
+
     if (!/^\d+$/.test(storeId)) {
       return res.json({
         response_action: "errors",
@@ -211,7 +211,7 @@ app.post("/slack/interactions", async (req, res) => {
         headers: { Authorization: `Bearer ${process.env.SLACK_BOT_TOKEN}` },
       });
     } catch (err) {
-      console.error("Error posting modal message:", err.response?.data || err.message);
+      console.error("Error posting modal submission:", err.response?.data || err.message);
     }
 
     res.status(200).send();
