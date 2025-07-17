@@ -5,7 +5,8 @@ const axios = require("axios");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const ALLOWED_CHANNEL_ID = "C08DT4RE96K"; // Replace with your actual channel ID
+
+const ALLOWED_CHANNEL_ID = "C08DT4RE96K"; // Your Slack channel ID
 
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
@@ -19,7 +20,7 @@ const reasonOptions = [
   { text: { type: "plain_text", text: "Public Holiday" }, value: "public_holiday" },
 ];
 
-// Slash Command to open modal
+// Slash Command → Modal
 app.post("/slack/command", async (req, res) => {
   const { trigger_id, command, channel_id } = req.body;
 
@@ -94,13 +95,13 @@ app.post("/slack/command", async (req, res) => {
   }
 });
 
-// Interactions
+// Interactions (Modal + Button)
 app.post("/slack/interactions", async (req, res) => {
   const payload = JSON.parse(req.body.payload);
   const userId = payload.user.id;
   const todaysDate = new Date().toISOString().slice(0, 10);
 
-  // ✅ Handle Submit button click
+  // Handle Submit button click
   if (payload.type === "block_actions") {
     const action = payload.actions[0];
 
@@ -109,7 +110,32 @@ app.post("/slack/interactions", async (req, res) => {
       const originalTs = payload.message.ts;
       const taskRef = action.value || "store_1234";
 
-      // Update only the matching button
+      // Get user info
+      let userEmail = "Unavailable";
+      try {
+        const userInfo = await axios.get("https://slack.com/api/users.info", {
+          headers: { Authorization: `Bearer ${process.env.SLACK_BOT_TOKEN}` },
+          params: { user: userId },
+        });
+        userEmail = userInfo.data?.user?.profile?.email || "Unavailable";
+      } catch (err) {
+        console.error("Error fetching user info:", err.response?.data || err.message);
+      }
+
+      // Post summary message
+      const summaryText = `:white_check_mark: *Task Completed*\n• Task Ref: ${taskRef}\n• Submitted by: <@${userId}> (${userEmail})\n• Date: ${todaysDate}`;
+      try {
+        await axios.post("https://slack.com/api/chat.postMessage", {
+          channel: ALLOWED_CHANNEL_ID,
+          text: summaryText,
+        }, {
+          headers: { Authorization: `Bearer ${process.env.SLACK_BOT_TOKEN}` },
+        });
+      } catch (err) {
+        console.error("Error posting summary message:", err.response?.data || err.message);
+      }
+
+      // Update original message with new button label
       const updatedBlocks = payload.message.blocks.map(block => {
         if (block.type === "actions") {
           return {
@@ -119,8 +145,7 @@ app.post("/slack/interactions", async (req, res) => {
                 return {
                   ...el,
                   text: { type: "plain_text", text: "Submitted" },
-                  style: "primary",
-                  disabled: true,
+                  style: "primary"
                 };
               }
               return el;
@@ -135,12 +160,11 @@ app.post("/slack/interactions", async (req, res) => {
           channel: originalChannel,
           ts: originalTs,
           blocks: updatedBlocks,
-          text: `✅ Store task ${taskRef} has been submitted`, // Make text different to force update
+          text: `✅ Store task ${taskRef} has been submitted`,
         }, {
           headers: { Authorization: `Bearer ${process.env.SLACK_BOT_TOKEN}` },
         });
-
-        console.log("chat.update response:", updateResponse.data);
+        console.log("✅ Button updated:", updateResponse.data);
       } catch (err) {
         console.error("Error updating message:", err.response?.data || err.message);
       }
@@ -149,7 +173,7 @@ app.post("/slack/interactions", async (req, res) => {
     }
   }
 
-  // ✅ Handle modal submission
+  // Handle Modal Submission
   if (payload.type === "view_submission") {
     const state = payload.view.state.values;
     const callbackId = payload.view.callback_id;
@@ -203,6 +227,4 @@ app.post("/slack/interactions", async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`✅ Server running on port ${PORT}`);
-});
+app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
