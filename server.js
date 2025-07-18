@@ -111,10 +111,10 @@ app.post("/slack/interactions", async (req, res) => {
   if (payload.type === "block_actions") {
     const action = payload.actions[0];
 
-    if (action.action_id === "submit_task") {
+    if (["reopen_delivery_slot", "reopen_retailer"].includes(action.action_id)) {
+      const actionId = action.action_id;
       const buttonText = action.text?.text?.toLowerCase().trim();
 
-      // ❌ Ignore repeat clicks
       if (buttonText === "submitted") {
         console.log("⚠️ Button already submitted. Ignoring further clicks.");
         return res.status(200).send();
@@ -122,7 +122,7 @@ app.post("/slack/interactions", async (req, res) => {
 
       const originalChannel = payload.channel.id;
       const originalTs = payload.message.ts;
-      const taskRef = action.value || "store_1234";
+      const taskRef = action.value || "N/A";
 
       // Get user info
       let userEmail = "Unavailable";
@@ -136,12 +136,18 @@ app.post("/slack/interactions", async (req, res) => {
         console.error("Error fetching user info:", err.response?.data || err.message);
       }
 
-      const summaryText = `:white_check_mark: *Task Completed*\n• Task Ref: ${taskRef}\n• Submitted by: <@${userId}> (${userEmail})\n• Date: ${todaysDate}`;
+      let statusText = "";
+      if (actionId === "reopen_delivery_slot") {
+        statusText = `✅ *Delivery Slot Reopened*\n• ID: ${taskRef}\n• By: <@${userId}> (${userEmail})\n• Date: ${todaysDate}`;
+      } else if (actionId === "reopen_retailer") {
+        statusText = `✅ *Retailer Reopened*\n• ID: ${taskRef}\n• By: <@${userId}> (${userEmail})\n• Date: ${todaysDate}`;
+      }
 
+      // Send summary message to channel
       try {
         await axios.post("https://slack.com/api/chat.postMessage", {
           channel: ALLOWED_CHANNEL_ID,
-          text: summaryText,
+          text: statusText,
         }, {
           headers: { Authorization: `Bearer ${process.env.SLACK_BOT_TOKEN}` },
         });
@@ -149,13 +155,13 @@ app.post("/slack/interactions", async (req, res) => {
         console.error("Error posting summary message:", err.response?.data || err.message);
       }
 
-      // Update the original button to "Submitted"
+      // Update the original button
       const updatedBlocks = payload.message.blocks.map(block => {
         if (block.type === "actions") {
           return {
             ...block,
             elements: block.elements.map(el => {
-              if (el.type === "button" && el.action_id === "submit_task") {
+              if (el.type === "button" && el.action_id === actionId) {
                 return {
                   ...el,
                   text: { type: "plain_text", text: "Submitted" },
@@ -174,7 +180,7 @@ app.post("/slack/interactions", async (req, res) => {
           channel: originalChannel,
           ts: originalTs,
           blocks: updatedBlocks,
-          text: `✅ Store task ${taskRef} has been submitted`,
+          text: `✅ ${actionId === "reopen_retailer" ? "Retailer" : "Delivery Slot"} ${taskRef} marked as active.`,
         }, {
           headers: { Authorization: `Bearer ${process.env.SLACK_BOT_TOKEN}` },
         });
